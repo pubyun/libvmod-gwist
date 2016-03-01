@@ -1,22 +1,40 @@
 varnishtest "Test gwist vmod"
 
-server s1 {
+server s1 -repeat 2 {
        rxreq
-       txresp
+       txresp -hdr "srv: s1"
 } -start
 
-varnish v1 -vcl+backend {
+server s2 {
+       rxreq
+       txresp -hdr "srv: s2"
+} -start
+
+
+varnish v1 -vcl {
 	import gwist from "${vmod_topbuild}/src/.libs/libvmod_gwist.so";
 
-	sub vcl_deliver {
-		set resp.http.hello = gwist.hello("World");
+	backend default {
+		.host = "${bad_ip}";
+		.port = "8089";
+	}
+
+	sub vcl_recv {
+		set req.backend_hint = gwist.backend(req.http.addr, req.http.port);
+		return (pass);
 	}
 } -start
 
 client c1 {
-	txreq -url "/"
+	txreq -hdr "addr: ${s1_addr}" -hdr "port: ${s1_port}"
 	rxresp
-	expect resp.http.hello == "Hello, World"
-}
+	expect resp.http.srv == "s1"
 
-client c1 -run
+	txreq -hdr "addr: ${s2_addr}" -hdr "port: ${s2_port}"
+	rxresp
+	expect resp.http.srv == "s2"
+
+	txreq -hdr "addr: ${s1_addr}" -hdr "port: ${s1_port}"
+	rxresp
+	expect resp.http.srv == "s1"
+} -run

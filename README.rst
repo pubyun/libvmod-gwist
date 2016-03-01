@@ -6,8 +6,8 @@ vmod_gwist
 Varnish Example Module
 ----------------------
 
-:Date: 2015-03-03
-:Version: 1.0
+:Date: 2016-03-01
+:Version: 
 :Manual section: 3
 
 SYNOPSIS
@@ -18,28 +18,8 @@ import gwist;
 DESCRIPTION
 ===========
 
-Example Varnish vmod demonstrating how to write an out-of-tree Varnish vmod.
+Simple vmod to create backends on-the-fly using a host:port pair.
 
-Implements the traditional Hello World as a vmod.
-
-FUNCTIONS
-=========
-
-hello
------
-
-Prototype
-        ::
-
-                hello(STRING S)
-Return value
-	STRING
-Description
-	Returns "Hello, " prepended to S
-Example
-        ::
-
-                set resp.http.hello = gwist.hello("World");
 
 INSTALLATION
 ============
@@ -94,9 +74,8 @@ In your VCL you could then use this vmod along the following lines::
 
         import gwist;
 
-        sub vcl_deliver {
-                # This sets resp.http.hello to "Hello, World"
-                set resp.http.hello = gwist.hello("World");
+        sub vcl_recv {
+                set req.backend_hint = gwist.backend("example.com", "80");
         }
 
 COMMON PROBLEMS

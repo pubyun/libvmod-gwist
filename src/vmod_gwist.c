@@ -57,8 +57,8 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			loadcnt++;
 			AZ(gctx);
 			ALLOC_OBJ(gctx, GWIST_CTX_MAGIC);
-			gctx->ttl = 10;
 			VTAILQ_INIT(&gctx->backends);
+			gctx->ttl = 10;
 			Lck_New(&gctx->mtx, lck_gwist);
 			priv->priv = gctx;
 			break;
@@ -101,10 +101,11 @@ vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 }
 
 VCL_BACKEND __match_proto__(td_gwist_backend)
-vmod_backend(VRT_CTX,
-		struct vmod_priv *priv,
+backend(VRT_CTX,
+		struct gwist_ctx *gctx,
 		VCL_STRING host,
-		VCL_STRING port) {
+		VCL_STRING port,
+		int af) {
 	char *name;
 	struct suckaddr *vsa;
 	struct vrt_backend vrt;
@@ -112,10 +113,7 @@ vmod_backend(VRT_CTX,
 	struct addrinfo hints = { 0 };
 	struct addrinfo *servinfo = NULL;
 	struct director *dir;
-	struct gwist_ctx *gctx;
 	int insert;
-
-	CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);
 
 	Lck_Lock(&gctx->mtx);
 
@@ -150,7 +148,7 @@ vmod_backend(VRT_CTX,
 		VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 	Lck_Unlock(&gctx->mtx);
 
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = af;
 	hints.ai_socktype = SOCK_STREAM;
 
 	if (getaddrinfo(host, port, &hints, &servinfo)) {
@@ -209,3 +207,18 @@ vmod_backend(VRT_CTX,
 
 	return (be->dir);
 }
+
+#define DECLARE_BE(NAME, AF)						\
+	VCL_BACKEND __match_proto__(td_gwist_backend)			\
+	NAME(VRT_CTX,							\
+			struct vmod_priv *priv,				\
+			VCL_STRING host,				\
+			VCL_STRING port) {				\
+		struct gwist_ctx *gctx;					\
+		CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);	\
+		return (backend(ctx, gctx, host, port, AF));		\
+	}
+
+DECLARE_BE(vmod_backend , AF_UNSPEC)
+DECLARE_BE(vmod_backend4, AF_INET)
+DECLARE_BE(vmod_backend6, AF_INET6)

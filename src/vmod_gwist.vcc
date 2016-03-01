@@ -22,6 +22,8 @@ The init-function declared next does not have documentation.
 
 $Event vmod_event
 $Function BACKEND backend(PRIV_VCL, STRING, STRING)
+$Function BACKEND backend4(PRIV_VCL, STRING, STRING)
+$Function BACKEND backend6(PRIV_VCL, STRING, STRING)
 
 The different functions provided by the VMOD should also have their own
 embedded documentation. This section is for the hello() function.

@@ -9,21 +9,31 @@ $Module gwist 3 Example VMOD
 DESCRIPTION
 ===========
 
-This is the embedded documentation for the gwist VMOD. It should
-mention what the vmod is intended to do.
+This VMOD provide a simple solution to a recurring problem: creating throwaway
+backends. Backend created this way are cached for a configurable time after
+which they'll be discarded.
 
-It can span multiple lines and is written in RST format.
-You can even have links and lists in here:
+Please be aware that this vmod is not to be used for heavy duty as the backends
+are stored in a linked-list, hence search is done linearly.
 
-* https://github.com/varnish/libvmod-gwist/
-* https://www.varnish-cache.org/
+$Function BACKEND backend(PRIV_VCL, STRING host, STRING port)
 
-The init-function declared next does not have documentation.
+Looks for an non-expired backend with the same host:port combination, and
+creates one if none is found. gwist will pick the first ip available.
 
-$Event vmod_event
-$Function BACKEND backend(PRIV_VCL, STRING, STRING)
-$Function BACKEND backend4(PRIV_VCL, STRING, STRING)
-$Function BACKEND backend6(PRIV_VCL, STRING, STRING)
+If `host` can't be resolved to an IP, no backend is returned.
 
-The different functions provided by the VMOD should also have their own
-embedded documentation. This section is for the hello() function.
+$Function BACKEND backend4(PRIV_VCL, STRING host, STRING port)
+
+Same as ``backend``, but only resolves to IPv4 addresses.
+
+$Function BACKEND backend6(PRIV_VCL, STRING host, STRING port)
+
+Same as ``backend``, but only resolves to IPv6 addresses.
+
+$Function VOID    ttl(PRIV_VCL, INT ttl)
+
+Changes the period during which backends are cached (default is 10 seconds).
+
+Calling this function will only affect newly created backends, and if ttl is
+equal or less than 0, backends won't be cached.

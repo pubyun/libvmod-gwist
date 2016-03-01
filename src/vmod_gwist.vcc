@@ -29,9 +29,9 @@ $Module gwist 3 Example VMOD
 DESCRIPTION
 ===========
 
-This VMOD provide a simple solution to a recurring problem: creating throwaway
-backends. Backend created this way are cached for a configurable time after
-which they'll be discarded.
+The gwist (Go Where I Send Thee) VMOD provide a simple solution to a
+recurring problem: creating throwaway backends. Backend created this way are
+cached for a configurable time after which they'll be discarded.
 
 Please be aware that this vmod is not to be used for heavy duty as the backends
 are stored in a linked-list, hence search is done linearly.

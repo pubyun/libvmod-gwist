@@ -23,6 +23,7 @@ struct gwist_be {
 	double				tod;
 	char				*host;
 	char				*port;
+	int				af;
 	struct director			*dir;
 	VTAILQ_ENTRY(gwist_be)	list;
 	pthread_cond_t                  cond;
@@ -132,7 +133,8 @@ backend(VRT_CTX,
 			VTAILQ_REMOVE(&gctx->backends, be, list);
 			free_backend(ctx, be);
 		}
-		if (!strcmp(be->host, host) &&
+		if ((af == AF_UNSPEC || af == be->af) &&
+				!strcmp(be->host, host) &&
 				!strcmp(be->port, port)) {
 			dir = be->dir;
 			if (!dir) {
@@ -149,6 +151,7 @@ backend(VRT_CTX,
 	ALLOC_OBJ(be, GWIST_BE_MAGIC);
 	be->host = strdup(host);
 	be->port = strdup(port);
+	be->af = af;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	be->refcnt++;
 

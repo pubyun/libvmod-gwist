@@ -36,6 +36,7 @@ cached for a configurable time after which they'll be discarded.
 Please be aware that this vmod is not to be used for heavy duty as the backends
 are stored in a linked-list, hence search is done linearly.
 
+$Event vmod_event
 $Function BACKEND backend(PRIV_VCL, STRING host, STRING port)
 
 Looks for an non-expired backend with the same host:port combination, and

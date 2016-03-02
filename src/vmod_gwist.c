@@ -38,10 +38,24 @@ struct gwist_ctx {
 
 static struct VSC_C_lck *lck_gwist;
 
+static void
+free_backend(VRT_CTX, struct gwist_be *be) {
+	AN(be->refcnt);
+	be->refcnt--;
+	if (be->refcnt)
+		return;
+	free(be->host);
+	free(be->port);
+	AZ(pthread_cond_destroy(&be->cond));
+	VRT_delete_backend(ctx, &be->dir);
+}
+
+
 int __match_proto__(vmod_event_f)
 vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 {
 	struct gwist_ctx *gctx;
+	struct gwist_be *be, *tbe;
 	ASSERT_CLI();
 	AN(ctx);
 	AN(ctx->vcl);
@@ -69,6 +83,11 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			if (loadcnt == 0) {
 				VSM_Free(lck_gwist);
 			}
+			Lck_Delete(&gctx->mtx);
+			VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
+				VTAILQ_REMOVE(&gctx->backends, be, list);
+				free_backend(ctx, be);
+			}
 			CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
 			FREE_OBJ(gctx);
 			break;
@@ -77,17 +96,6 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 	}
 
 	return (0);
-}
-
-static void
-free_backend(VRT_CTX, struct gwist_be *be) {
-	AN(be->refcnt);
-	be->refcnt--;
-	if (be->refcnt)
-		return;
-	free(be->host);
-	free(be->port);
-	VRT_delete_backend(ctx, &be->dir);
 }
 
 VCL_VOID __match_proto__(td_gwist_backend)

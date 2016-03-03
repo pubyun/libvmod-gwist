@@ -66,11 +66,10 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 		case VCL_EVENT_LOAD:
 			AZ(priv->priv);
 			CAST_OBJ(gctx, priv->priv, GWIST_CTX_MAGIC);
-			if (loadcnt == 0) {
+			if (loadcnt++ == 0)
 				lck_gwist = Lck_CreateClass("gwist.director");
-			}
+
 			AN(lck_gwist);
-			loadcnt++;
 			AZ(gctx);
 			ALLOC_OBJ(gctx, GWIST_CTX_MAGIC);
 			VTAILQ_INIT(&gctx->backends);
@@ -81,10 +80,9 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 		case VCL_EVENT_DISCARD:
 			CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);
 			assert(loadcnt > 0);
-			loadcnt--;
-			if (loadcnt == 0) {
+			if (--loadcnt == 0)
 				VSM_Free(lck_gwist);
-			}
+
 			Lck_Delete(&gctx->mtx);
 			VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 				VTAILQ_REMOVE(&gctx->backends, be, list);
@@ -198,7 +196,7 @@ backend(VRT_CTX,
 		}
 	}
 
-	/* no fit found, so check if we should insert, just return a simple
+	/* no match found, so check if we should insert, just return a simple
 	 * backend without wrapping it in a gwist_be */
 	if (!insert) {
 		Lck_Unlock(&gctx->mtx);
@@ -209,16 +207,18 @@ backend(VRT_CTX,
 	}
 
 	ALLOC_OBJ(be, GWIST_BE_MAGIC);
+	be->tod = ctx->now + gctx->ttl;
 	be->host = strdup(host);
 	be->port = strdup(port);
 	be->af = af;
 	AZ(pthread_cond_init(&be->cond, NULL));
-	be->refcnt++;
+	be->refcnt = 1;
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
+
 	Lck_Unlock(&gctx->mtx);
 
 	be->dir = bare_backend(ctx, host, port, af);
-	be->tod = ctx->now + gctx->ttl;
+
 	Lck_Lock(&gctx->mtx);
 	AZ(pthread_cond_signal(&be->cond));
 	Lck_Unlock(&gctx->mtx);

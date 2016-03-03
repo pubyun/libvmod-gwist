@@ -13,8 +13,6 @@ typedef VCL_BACKEND td_gwist_ttl(VRT_CTX, struct vmod_priv *, VCL_INT);
 typedef VCL_BACKEND td_gwist_backend(VRT_CTX, struct vmod_priv *,
 		VCL_STRING, VCL_STRING);
 
-static unsigned loadcnt = 0;
-
 struct gwist_be {
 	unsigned			magic;
 #define GWIST_BE_MAGIC			0x6887bc23
@@ -36,6 +34,7 @@ struct gwist_ctx {
 	VTAILQ_HEAD(,gwist_be)		backends;
 };
 
+static unsigned loadcnt = 0;
 static struct VSC_C_lck *lck_gwist;
 
 static void
@@ -68,7 +67,6 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 				lck_gwist = Lck_CreateClass("gwist.director");
 
 			AN(lck_gwist);
-			AZ(gctx);
 			ALLOC_OBJ(gctx, GWIST_CTX_MAGIC);
 			VTAILQ_INIT(&gctx->backends);
 			gctx->ttl = 10;

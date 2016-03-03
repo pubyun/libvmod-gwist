@@ -57,12 +57,11 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 	struct gwist_be *be, *tbe;
 	ASSERT_CLI();
 	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
-	AN(ctx->vcl);
+	CAST_OBJ(gctx, priv->priv, GWIST_CTX_MAGIC);
 
 	switch (e) {
 		case VCL_EVENT_LOAD:
-			AZ(priv->priv);
-			CAST_OBJ(gctx, priv->priv, GWIST_CTX_MAGIC);
+			AZ(gctx);
 			if (loadcnt++ == 0)
 				lck_gwist = Lck_CreateClass("gwist.director");
 
@@ -74,7 +73,6 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			priv->priv = gctx;
 			break;
 		case VCL_EVENT_DISCARD:
-			CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);
 			assert(loadcnt > 0);
 			if (--loadcnt == 0)
 				VSM_Free(lck_gwist);

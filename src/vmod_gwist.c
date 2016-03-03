@@ -29,7 +29,7 @@ struct gwist_be {
 	char				*port;
 	int				af;
 	struct director			*dir;
-	VTAILQ_ENTRY(gwist_be)	list;
+	VTAILQ_ENTRY(gwist_be)		list;
 	pthread_cond_t                  cond;
 };
 

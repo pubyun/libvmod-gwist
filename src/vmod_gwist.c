@@ -92,7 +92,6 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 		default:
 			break;
 	}
-
 	return (0);
 }
 
@@ -136,7 +135,6 @@ bare_backend(VRT_CTX, const char *host, const char *port,
 	freeaddrinfo(servinfo);
 
 	INIT_OBJ(&vrt, VRT_BACKEND_MAGIC);
-
 	if (VSA_Get_Proto(vsa) == AF_INET) {
 		vrt.ipv4_addr = host;
 		vrt.ipv4_suckaddr = vsa;
@@ -167,8 +165,8 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	AN(port);
 	AN(hints);
 
-	/* if ttl is zero, and the cache is empty, we know we have to create a backend
-	 * and we won't cache it, no need to lock. */
+	/* if ttl is zero, and the cache is empty, we know we have to create
+	 * a backend and we won't cache it, no need to lock. (useless optim?)*/
 	if (!gctx->ttl && VTAILQ_EMPTY(&gctx->backends)) {
 		_dir = dir = bare_backend(ctx, host, port, hints);
 		if (!_dir)
@@ -214,8 +212,8 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	be->host = strdup(host);
 	be->port = strdup(port);
 	be->af = hints->ai_family;
-	AZ(pthread_cond_init(&be->cond, NULL));
 	be->refcnt = 1;
+	AZ(pthread_cond_init(&be->cond, NULL));
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 
 	/* AI_NUMERICHOST avoids DNS resolution, no need to unlock/relock */
@@ -236,13 +234,12 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	VCL_BACKEND __match_proto__(td_gwist_backend)			\
 	NAME(VRT_CTX,  struct vmod_priv *priv,				\
 			VCL_STRING host, VCL_STRING port) {		\
-		struct gwist_ctx *gctx;					\
 		struct addrinfo hints = { 0 };				\
 		hints.ai_family = AF;					\
 		hints.ai_socktype = SOCK_STREAM;			\
 		hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | FLAGS;	\
-		CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);	\
-		return (backend(ctx, gctx, host, port, &hints));	\
+		return (backend(ctx, (struct gwist_ctx *)priv->priv,	\
+					host, port, &hints));	\
 	}
 
 DECLARE_BE(vmod_backend ,    AF_UNSPEC, 0)

@@ -63,7 +63,7 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 	struct gwist_ctx *gctx;
 	struct gwist_be *be, *tbe;
 	ASSERT_CLI();
-	AN(ctx);
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
 	AN(ctx->vcl);
 
 	switch (e) {
@@ -119,7 +119,12 @@ bare_backend(VRT_CTX, const char *host, const char *port, int af) {
 	struct addrinfo hints = { 0 };
 	struct addrinfo *servinfo = NULL;
 	struct suckaddr *vsa;
-	char *name;
+	char name[64 + 5 + 8]; /* host + port + gwist..\0 */
+
+	int r = snprintf(name, sizeof name, "gwist.%s.%s", host, port);
+	assert(r > 0);
+	if (r > sizeof name)
+		return (NULL);
 
 	hints.ai_family = af;
 	hints.ai_socktype = SOCK_STREAM;
@@ -145,12 +150,7 @@ bare_backend(VRT_CTX, const char *host, const char *port, int af) {
 		return (NULL);
 	}
 
-	// TODO: have a stack-allocated name
-	name = malloc(strlen(host) + strlen(port) + 8);
-	sprintf(name, "gwist.%s.%s", host, port);
-
 	vrt.vcl_name = name;
-	free(name);
 	vrt.hosthdr = host;
 	vrt.port = port;
 

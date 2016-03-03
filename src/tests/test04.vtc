@@ -1,0 +1,21 @@
+varnishtest "Test host too long"
+
+server s1 -repeat 2 {
+       rxreq
+       txresp -hdr "srv: s1"
+} -start
+
+varnish v1 -vcl+backend {
+	import gwist from "${vmod_topbuild}/src/.libs/libvmod_gwist.so";
+
+	sub vcl_recv {
+		set req.backend_hint = gwist.backend(req.http.addr, "80");
+		return (pass);
+	}
+} -start
+
+client c1 {
+	txreq -hdr "addr: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+	rxresp
+	expect resp.status == 503
+} -run

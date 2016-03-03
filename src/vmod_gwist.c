@@ -28,7 +28,7 @@ struct gwist_be {
 
 struct gwist_ctx {
 	unsigned			magic;
-#define GWIST_CTX_MAGIC			0xcf2e5a2
+#define GWIST_CTX_MAGIC			0xcf26e5a2
 	VCL_INT				ttl;
 	struct lock			mtx;
 	VTAILQ_HEAD(,gwist_be)		backends;

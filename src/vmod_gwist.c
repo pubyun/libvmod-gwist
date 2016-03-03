@@ -48,7 +48,8 @@ free_backend(VRT_CTX, struct gwist_be *be) {
 	free(be->host);
 	free(be->port);
 	AZ(pthread_cond_destroy(&be->cond));
-	VRT_delete_backend(ctx, &be->dir);
+	if (be->dir)
+		VRT_delete_backend(ctx, &be->dir);
 }
 
 
@@ -102,6 +103,7 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 VCL_VOID __match_proto__(td_gwist_backend)
 vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 	struct gwist_ctx *gctx;
+	assert(ttl >= 0);
 	CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);
 
 	Lck_Lock(&gctx->mtx);
@@ -109,24 +111,72 @@ vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 	Lck_Unlock(&gctx->mtx);
 }
 
-VCL_BACKEND __match_proto__(td_gwist_backend)
+struct director *
+bare_backend(VRT_CTX, const char *host, const char *port, int af) {
+	struct vrt_backend vrt;
+	struct addrinfo hints = { 0 };
+	struct addrinfo *servinfo = NULL;
+	struct suckaddr *vsa;
+	char *name;
+
+	hints.ai_family = af;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if (getaddrinfo(host, port, &hints, &servinfo))
+		return (NULL);
+
+	AN(servinfo);
+	vsa = VSA_Malloc(servinfo->ai_addr, servinfo->ai_addrlen);
+	AN(vsa);
+	freeaddrinfo(servinfo);
+
+	INIT_OBJ(&vrt, VRT_BACKEND_MAGIC);
+
+	if (VSA_Get_Proto(vsa) == AF_INET) {
+		vrt.ipv4_addr = host;
+		vrt.ipv4_suckaddr = vsa;
+	} else if (VSA_Get_Proto(vsa) == AF_INET6) {
+		vrt.ipv6_addr = host;
+		vrt.ipv6_suckaddr = vsa;
+	} else {
+		free(vsa);
+		return (NULL);
+	}
+
+	// TODO: have a stack-allocated name
+	name = malloc(strlen(host) + strlen(port) + 8);
+	sprintf(name, "gwist.%s.%s", host, port);
+
+	vrt.vcl_name = name;
+	free(name);
+	vrt.hosthdr = host;
+	vrt.port = port;
+
+	return (VRT_new_backend(ctx, &vrt));
+}
+
+static VCL_BACKEND __match_proto__(td_gwist_backend)
 backend(VRT_CTX,
 		struct gwist_ctx *gctx,
 		VCL_STRING host,
 		VCL_STRING port,
 		int af) {
-	char *name;
-	struct suckaddr *vsa;
-	struct vrt_backend vrt;
 	struct gwist_be *be, *tbe;
-	struct addrinfo hints = { 0 };
-	struct addrinfo *servinfo = NULL;
-	struct director *dir;
+	struct director *_dir, *dir;
 	int insert;
+
+	/* if ttl is zero, and the cache is empty, we know we have to create a backend
+	 * and we won't cache it, no need to lock. */
+	if (!gctx->ttl && VTAILQ_EMPTY(&gctx->backends)) {
+		_dir = dir = bare_backend(ctx, host, port, af);
+		if (!_dir)
+			VRT_delete_backend(ctx, &_dir);
+		return (dir);
+	}
 
 	Lck_Lock(&gctx->mtx);
 
-	insert = &gctx->ttl > 0 ? 1 : 0;
+	insert = gctx->ttl > 0 ? 1 : 0;
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		if (be->tod > ctx->now) { // make room for the kids
@@ -148,73 +198,30 @@ backend(VRT_CTX,
 		}
 	}
 
+	/* no fit found, so check if we should insert, just return a simple
+	 * backend without wrapping it in a gwist_be */
+	if (!insert) {
+		Lck_Unlock(&gctx->mtx);
+		_dir = dir = bare_backend(ctx, host, port, af);
+		if (!_dir)
+			VRT_delete_backend(ctx, &_dir);
+		return (dir);
+	}
+
 	ALLOC_OBJ(be, GWIST_BE_MAGIC);
 	be->host = strdup(host);
 	be->port = strdup(port);
 	be->af = af;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	be->refcnt++;
-
-	if (insert)
-		VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
+	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 	Lck_Unlock(&gctx->mtx);
 
-	hints.ai_family = af;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if (getaddrinfo(host, port, &hints, &servinfo)) {
-		VTAILQ_REMOVE(&gctx->backends, be, list);
-		free_backend(ctx, be);
-		Lck_Lock(&gctx->mtx);
-		AZ(pthread_cond_signal(&be->cond));
-		Lck_Unlock(&gctx->mtx);
-		return (NULL);
-	}
-
-	AN(servinfo);
-
-	vsa = VSA_Malloc(servinfo->ai_addr, servinfo->ai_addrlen);
-	AN(vsa);
-
-	INIT_OBJ(&vrt, VRT_BACKEND_MAGIC);
-
-	if (VSA_Get_Proto(vsa) == AF_INET) {
-		vrt.ipv4_addr = host;
-		vrt.ipv4_suckaddr = vsa;
-	} else if (VSA_Get_Proto(vsa) == AF_INET6) {
-		vrt.ipv6_addr = host;
-		vrt.ipv6_suckaddr = vsa;
-	} else {
-		freeaddrinfo(servinfo);
-		VTAILQ_REMOVE(&gctx->backends, be, list);
-		free_backend(ctx, be);
-		Lck_Lock(&gctx->mtx);
-		AZ(pthread_cond_signal(&be->cond));
-		Lck_Unlock(&gctx->mtx);
-		return (NULL);
-	}
-
-
-	// TODO: have a stack-allocated name
-	name = malloc(strlen(host) + strlen(port) + 8);
-	sprintf(name, "gwist.%s.%s", host, port);
-	vrt.vcl_name = name;
-	vrt.hosthdr = host;
-	vrt.port = port;
-
-	be->dir = VRT_new_backend(ctx, &vrt);
-
-	free(name);
-	freeaddrinfo(servinfo);
-
-	if (insert) {
-		be->tod = ctx->now + gctx->ttl;
-
-		Lck_Lock(&gctx->mtx);
-		AZ(pthread_cond_signal(&be->cond));
-		Lck_Unlock(&gctx->mtx);
-	} else
-		be->tod = 0;
+	be->dir = bare_backend(ctx, host, port, af);
+	be->tod = ctx->now + gctx->ttl;
+	Lck_Lock(&gctx->mtx);
+	AZ(pthread_cond_signal(&be->cond));
+	Lck_Unlock(&gctx->mtx);
 
 	return (be->dir);
 }

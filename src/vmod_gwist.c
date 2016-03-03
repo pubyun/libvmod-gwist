@@ -200,7 +200,7 @@ backend(VRT_CTX,
 		}
 	}
 
-	/* no match found, so check if we should insert, just return a simple
+	/* no match found, if inserting isn't required, just return a simple
 	 * backend without wrapping it in a gwist_be */
 	if (!insert) {
 		Lck_Unlock(&gctx->mtx);

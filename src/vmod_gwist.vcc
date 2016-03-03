@@ -54,8 +54,8 @@ Same as ``backend``, but only resolves to IPv6 addresses.
 
 $Function BACKEND backend_num(PRIV_VCL, STRING host, STRING port)
 
-Same as ``backend``, but doesn't attempt DNS resolution, so host should be an
-IP (v4 or v6).
+Same as ``backend``, but doesn't attempt DNS resolution. It's faster, but host
+must be an IP (v4 or v6).
 
 $Function VOID    ttl(PRIV_VCL, INT ttl)
 

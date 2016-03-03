@@ -9,7 +9,7 @@
 
 #include "vcc_if.h"
 
-typedef VCL_BACKEND td_gwist_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl);
+typedef VCL_BACKEND td_gwist_ttl(VRT_CTX, struct vmod_priv *, VCL_INT);
 typedef VCL_BACKEND td_gwist_backend(VRT_CTX, struct vmod_priv *,
 		VCL_STRING, VCL_STRING);
 

@@ -165,7 +165,6 @@ backend(VRT_CTX,
 		int af) {
 	struct gwist_be *be, *tbe;
 	struct director *_dir, *dir;
-	int insert;
 
 	/* if ttl is zero, and the cache is empty, we know we have to create a backend
 	 * and we won't cache it, no need to lock. */
@@ -177,8 +176,6 @@ backend(VRT_CTX,
 	}
 
 	Lck_Lock(&gctx->mtx);
-
-	insert = gctx->ttl > 0 ? 1 : 0;
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		if (be->tod > ctx->now) { // make room for the kids
@@ -202,7 +199,7 @@ backend(VRT_CTX,
 
 	/* no match found, if inserting isn't required, just return a simple
 	 * backend without wrapping it in a gwist_be */
-	if (!insert) {
+	if (!gctx->ttl) {
 		Lck_Unlock(&gctx->mtx);
 		_dir = dir = bare_backend(ctx, host, port, af);
 		if (!_dir)

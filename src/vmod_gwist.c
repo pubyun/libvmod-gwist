@@ -4,11 +4,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include <time.h>
-
 #include "vcl.h"
 #include "vsa.h"
-#include "vtim.h"
 #include "vrt.h"
 #include "cache/cache.h"
 

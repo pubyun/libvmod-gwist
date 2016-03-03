@@ -161,12 +161,9 @@ bare_backend(VRT_CTX, const char *host, const char *port,
 }
 
 static VCL_BACKEND
-backend(VRT_CTX,
-		struct gwist_ctx *gctx,
-		VCL_STRING host,
-		VCL_STRING port,
+backend(VRT_CTX, struct gwist_ctx *gctx,
+		VCL_STRING host, VCL_STRING port,
 		const struct addrinfo *hints) {
-
 	struct gwist_be *be, *tbe;
 	struct director *_dir, *dir;
 	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
@@ -242,10 +239,8 @@ backend(VRT_CTX,
 
 #define DECLARE_BE(NAME, AF, FLAGS)					\
 	VCL_BACKEND __match_proto__(td_gwist_backend)			\
-	NAME(VRT_CTX,							\
-			struct vmod_priv *priv,				\
-			VCL_STRING host,				\
-			VCL_STRING port) {				\
+	NAME(VRT_CTX,  struct vmod_priv *priv,				\
+			VCL_STRING host, VCL_STRING port) {		\
 		struct gwist_ctx *gctx;					\
 		struct addrinfo hints = { 0 };				\
 		hints.ai_family = AF;					\

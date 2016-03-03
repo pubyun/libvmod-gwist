@@ -14,6 +14,10 @@
 
 #include "vcc_if.h"
 
+typedef VCL_BACKEND td_gwist_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl);
+typedef VCL_BACKEND td_gwist_backend(VRT_CTX, struct vmod_priv *,
+		VCL_STRING, VCL_STRING);
+
 static unsigned loadcnt = 0;
 
 struct gwist_be {
@@ -98,7 +102,7 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 	return (0);
 }
 
-VCL_VOID __match_proto__(td_gwist_backend)
+VCL_VOID __match_proto__(td_gwist_ttl)
 vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 	struct gwist_ctx *gctx;
 	assert(ttl >= 0);
@@ -153,7 +157,7 @@ bare_backend(VRT_CTX, const char *host, const char *port, int af) {
 	return (VRT_new_backend(ctx, &vrt));
 }
 
-static VCL_BACKEND __match_proto__(td_gwist_backend)
+static VCL_BACKEND
 backend(VRT_CTX,
 		struct gwist_ctx *gctx,
 		VCL_STRING host,

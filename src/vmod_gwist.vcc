@@ -52,6 +52,11 @@ $Function BACKEND backend6(PRIV_VCL, STRING host, STRING port)
 
 Same as ``backend``, but only resolves to IPv6 addresses.
 
+$Function BACKEND backend_num(PRIV_VCL, STRING host, STRING port)
+
+Same as ``backend``, but doesn't attempt DNS resolution, so host should be an
+IP (v4 or v6).
+
 $Function VOID    ttl(PRIV_VCL, INT ttl)
 
 Changes the period during which backends are cached (default is 10 seconds).

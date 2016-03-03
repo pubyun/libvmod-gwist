@@ -106,6 +106,7 @@ VCL_VOID __match_proto__(td_gwist_ttl)
 vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 	struct gwist_ctx *gctx;
 	assert(ttl >= 0);
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
 	CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);
 
 	Lck_Lock(&gctx->mtx);
@@ -114,22 +115,25 @@ vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 }
 
 struct director *
-bare_backend(VRT_CTX, const char *host, const char *port, int af) {
+bare_backend(VRT_CTX, const char *host, const char *port,
+		const struct addrinfo *hints) {
 	struct vrt_backend vrt;
-	struct addrinfo hints = { 0 };
 	struct addrinfo *servinfo = NULL;
 	struct suckaddr *vsa;
 	char name[64 + 5 + 8]; /* host + port + gwist..\0 */
+	int r;
 
-	int r = snprintf(name, sizeof name, "gwist.%s.%s", host, port);
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
+	AN(host);
+	AN(port);
+	AN(hints);
+
+	r = snprintf(name, sizeof name, "gwist.%s.%s", host, port);
 	assert(r > 0);
 	if (r > sizeof name)
 		return (NULL);
 
-	hints.ai_family = af;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if (getaddrinfo(host, port, &hints, &servinfo))
+	if (getaddrinfo(host, port, hints, &servinfo))
 		return (NULL);
 
 	AN(servinfo);
@@ -162,14 +166,20 @@ backend(VRT_CTX,
 		struct gwist_ctx *gctx,
 		VCL_STRING host,
 		VCL_STRING port,
-		int af) {
+		const struct addrinfo *hints) {
+
 	struct gwist_be *be, *tbe;
 	struct director *_dir, *dir;
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
+	CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
+	AN(host);
+	AN(port);
+	AN(hints);
 
 	/* if ttl is zero, and the cache is empty, we know we have to create a backend
 	 * and we won't cache it, no need to lock. */
 	if (!gctx->ttl && VTAILQ_EMPTY(&gctx->backends)) {
-		_dir = dir = bare_backend(ctx, host, port, af);
+		_dir = dir = bare_backend(ctx, host, port, hints);
 		if (!_dir)
 			VRT_delete_backend(ctx, &_dir);
 		return (dir);
@@ -182,7 +192,8 @@ backend(VRT_CTX,
 			VTAILQ_REMOVE(&gctx->backends, be, list);
 			free_backend(ctx, be);
 		}
-		if ((af == AF_UNSPEC || af == be->af) &&
+		if ((hints->ai_family == AF_UNSPEC ||
+					hints->ai_family == be->af) &&
 				!strcmp(be->host, host) &&
 				!strcmp(be->port, port)) {
 			dir = be->dir;
@@ -201,7 +212,7 @@ backend(VRT_CTX,
 	 * backend without wrapping it in a gwist_be */
 	if (!gctx->ttl) {
 		Lck_Unlock(&gctx->mtx);
-		_dir = dir = bare_backend(ctx, host, port, af);
+		_dir = dir = bare_backend(ctx, host, port, hints);
 		if (!_dir)
 			VRT_delete_backend(ctx, &_dir);
 		return (dir);
@@ -211,33 +222,41 @@ backend(VRT_CTX,
 	be->tod = ctx->now + gctx->ttl;
 	be->host = strdup(host);
 	be->port = strdup(port);
-	be->af = af;
+	be->af = hints->ai_family;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	be->refcnt = 1;
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 
-	Lck_Unlock(&gctx->mtx);
-
-	be->dir = bare_backend(ctx, host, port, af);
-
-	Lck_Lock(&gctx->mtx);
+	/* AI_NUMERICHOST avoids DNS resolution, no need to unlock/relock */
+	if (hints->ai_flags & AI_NUMERICHOST)
+		be->dir = bare_backend(ctx, host, port, hints);
+	else {
+		Lck_Unlock(&gctx->mtx);
+		be->dir = bare_backend(ctx, host, port, hints);
+		Lck_Lock(&gctx->mtx);
+	}
 	AZ(pthread_cond_signal(&be->cond));
 	Lck_Unlock(&gctx->mtx);
 
 	return (be->dir);
 }
 
-#define DECLARE_BE(NAME, AF)						\
+#define DECLARE_BE(NAME, AF, FLAGS)					\
 	VCL_BACKEND __match_proto__(td_gwist_backend)			\
 	NAME(VRT_CTX,							\
 			struct vmod_priv *priv,				\
 			VCL_STRING host,				\
 			VCL_STRING port) {				\
 		struct gwist_ctx *gctx;					\
+		struct addrinfo hints = { 0 };				\
+		hints.ai_family = AF;					\
+		hints.ai_socktype = SOCK_STREAM;			\
+		hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | FLAGS;	\
 		CAST_OBJ_NOTNULL(gctx, priv->priv, GWIST_CTX_MAGIC);	\
-		return (backend(ctx, gctx, host, port, AF));		\
+		return (backend(ctx, gctx, host, port, &hints));	\
 	}
 
-DECLARE_BE(vmod_backend , AF_UNSPEC)
-DECLARE_BE(vmod_backend4, AF_INET)
-DECLARE_BE(vmod_backend6, AF_INET6)
+DECLARE_BE(vmod_backend ,    AF_UNSPEC, 0)
+DECLARE_BE(vmod_backend4,    AF_INET,	0)
+DECLARE_BE(vmod_backend6,    AF_INET6,	0)
+DECLARE_BE(vmod_backend_num, AF_UNSPEC, AI_NUMERICHOST)

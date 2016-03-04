@@ -169,7 +169,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	Lck_Lock(&gctx->mtx);
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
-		if (be->tod > ctx->now) { // make room for the kids
+		if (be->tod > ctx->now) { /* make room for the kids */
 			VTAILQ_REMOVE(&gctx->backends, be, list);
 			free_backend(ctx, be);
 		}

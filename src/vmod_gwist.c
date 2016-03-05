@@ -9,6 +9,10 @@
 
 #include "vcc_if.h"
 
+/* backend states
+ * cached:	RESOLVING -> CACHED -> DONE
+ * transient:	          TRANSIENT -> DONE
+ */
 enum gwist_state {
 	TRANSIENT,
 	RESOLVING,
@@ -42,6 +46,9 @@ struct gwist_ctx {
 static unsigned loadcnt = 0;
 static struct VSC_C_lck *lck_gwist;
 
+/* decrease refcnt, but doesn't destroy (we need a VRT_CTX for that, and
+ * release_backend hasn't access to it
+ */
 static void
 release_backend_l(struct gwist_be *be, int lock) {
 	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
@@ -56,6 +63,7 @@ release_backend_l(struct gwist_be *be, int lock) {
 		Lck_Unlock(be->mtx);
 }
 
+/* called at the end of a task (this is a vmod_priv_free_f) */
 static void
 release_backend(void *ptr) {
 	struct gwist_be *be;
@@ -129,6 +137,8 @@ vmod_ttl(VRT_CTX, struct vmod_priv *priv, VCL_INT ttl) {
 	Lck_Unlock(&gctx->mtx);
 }
 
+/* just create a vrt backend, NULL is an acceptable response and means
+ * no backend */
 struct director *
 bare_backend(VRT_CTX, const char *host, const char *port,
 		const struct addrinfo *hints) {
@@ -192,14 +202,20 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 
 	Lck_Lock(&gctx->mtx);
 
+	/* clean previous backend, if any */
 	if (be)
 		release_backend_l(be, 0);
 	priv->free = release_backend;
+
+	/* don't even try */
 	if (!host || !port) {
 		Lck_Unlock(&gctx->mtx);
 		return (NULL);
 	}
 
+	/* look for valid candidates (valid and not transient)
+	 * and use the occasion to clean old backends if nobody uses them
+	 */
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
 		if (be->state == CACHED && be->tod > ctx->now)

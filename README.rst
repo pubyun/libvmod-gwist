@@ -47,11 +47,11 @@ API
 
 gwist offers the following functions:
 
- * ttl(seconds): changes the caching period of objects, can be used throughout the
-   vcl.
- * backend(host, port): finds the first matching server
- * backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
- * backend_num(host, port): host must be an IP address
+* ttl(seconds): changes the caching period of objects, can be used throughout the
+  vcl.
+* backend(host, port): finds the first matching server
+* backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
+* backend_num(host, port): host must be an IP address
 
 WARNING
 -------

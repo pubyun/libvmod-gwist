@@ -25,12 +25,12 @@ struct gwist_be {
 #define GWIST_BE_MAGIC			0x6887bc23
 	unsigned			refcnt;
 	enum gwist_state		state;
-	double				tod;
+	int				af;
 	char				*host;
 	char				*port;
 	struct lock			*mtx;
-	int				af;
 	struct director			*dir;
+	double				tod;
 	VTAILQ_ENTRY(gwist_be)		list;
 	pthread_cond_t                  cond;
 };

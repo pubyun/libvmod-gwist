@@ -35,6 +35,8 @@ static struct VSC_C_lck *lck_gwist;
 
 static void
 free_backend(VRT_CTX, struct gwist_be *be) {
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
+	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
 	AN(be->refcnt);
 	be->refcnt--;
 	if (be->refcnt)
@@ -44,6 +46,8 @@ free_backend(VRT_CTX, struct gwist_be *be) {
 	AZ(pthread_cond_destroy(&be->cond));
 	if (be->dir)
 		VRT_delete_backend(ctx, &be->dir);
+	free(be);
+
 }
 
 int __match_proto__(vmod_event_f)

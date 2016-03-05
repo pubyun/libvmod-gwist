@@ -1,0 +1,29 @@
+varnishtest "Test empty port/host"
+
+server s1 -repeat 2 {
+       rxreq
+       txresp -hdr "srv: s1"
+} -start
+
+varnish v1 -vcl+backend {
+	import gwist from "${vmod_topbuild}/src/.libs/libvmod_gwist.so";
+
+	sub vcl_recv { return (pass); }
+	sub vcl_backend_fetch {
+		set bereq.backend = gwist.backend(bereq.http.addr, bereq.http.port);
+	}
+} -start
+
+client c1 {
+	txreq -hdr "addr: ${s1_addr}"
+	rxresp
+	expect resp.status == 503
+
+	txreq -hdr "port: ${s1_port}"
+	rxresp
+	expect resp.status == 503
+
+	txreq
+	rxresp
+	expect resp.status == 503
+} -run

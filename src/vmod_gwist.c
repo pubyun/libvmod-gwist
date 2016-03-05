@@ -9,12 +9,19 @@
 
 #include "vcc_if.h"
 
+enum gwist_state {
+	gwist_st_transient,
+	gwist_st_resolving,
+	gwist_st_cached,
+	gwist_st_done,
+};
+
 struct gwist_be {
 	unsigned			magic;
 #define GWIST_BE_MAGIC			0x6887bc23
 	unsigned			refcnt;
+	enum gwist_state		state;
 	double				tod;
-	const struct vrt_ctx		*vrt;
 	char				*host;
 	char				*port;
 	struct lock			*mtx;
@@ -36,32 +43,35 @@ static unsigned loadcnt = 0;
 static struct VSC_C_lck *lck_gwist;
 
 static void
-free_backend_l(struct gwist_be *be, int lock) {
-	if (!be)
-		return;
-	CHECK_OBJ_NOTNULL(be->vrt, VRT_CTX_MAGIC);
+release_backend_l(struct gwist_be *be, int lock) {
+	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
 	if (lock)
 		Lck_Lock(be->mtx);
-	AN(be->refcnt);
+	assert(be->state == gwist_st_cached || be->state == gwist_st_transient);
 	be->refcnt--;
+	AN(be->refcnt);
 	if (lock)
 		Lck_Unlock(be->mtx);
-	if (be->refcnt)
-		return;
+}
+
+static void
+release_backend(void *ptr) {
+	struct gwist_be *be;
+	CAST_OBJ(be, ptr, GWIST_BE_MAGIC);
+	release_backend_l(be, 1);
+}
+
+static void
+free_backend(VRT_CTX, struct gwist_be *be) {
+	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
+	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
+	assert(be->refcnt == 1);
 	free(be->host);
 	free(be->port);
 	AZ(pthread_cond_destroy(&be->cond));
 	if (be->dir)
-		VRT_delete_backend(be->vrt, &be->dir);
+		VRT_delete_backend(ctx, &be->dir);
 	free(be);
-
-}
-
-static void
-free_backend(void *ptr) {
-	struct gwist_be *be;
-	CAST_OBJ(be, ptr, GWIST_BE_MAGIC);
-	free_backend_l(be, 1);
 }
 
 int __match_proto__(vmod_event_f)
@@ -91,11 +101,11 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			if (--loadcnt == 0)
 				VSM_Free(lck_gwist);
 
-			Lck_Delete(&gctx->mtx);
 			VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 				VTAILQ_REMOVE(&gctx->backends, be, list);
-				free_backend_l(be, 0);
+				free_backend(ctx, be);
 			}
+			Lck_Delete(&gctx->mtx);
 			CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
 			FREE_OBJ(gctx);
 			break;
@@ -168,11 +178,8 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		VCL_STRING host, VCL_STRING port,
 		const struct addrinfo *hints) {
 	struct gwist_be *be, *tbe;
-	struct director *_dir, *dir;
 	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
 	CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
-	AN(host);
-	AN(port);
 	AN(hints);
 
 	CAST_OBJ(be, priv->priv, GWIST_BE_MAGIC);
@@ -180,49 +187,59 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	Lck_Lock(&gctx->mtx);
 
 	if (be)
-		free_backend_l(be, 0);
-	priv->free = free_backend;
+		release_backend_l(be, 0);
+	priv->free = release_backend;
+	if (!host || !port) {
+		Lck_Unlock(&gctx->mtx);
+		return (NULL);
+	}
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
-		if (be->tod > ctx->now) { /* make room for the kids */
+		CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
+		if (be->state  == gwist_st_cached && be->tod > ctx->now)
+			be->state = gwist_st_done;
+		if (be->refcnt == 1) {
+			assert(be->refcnt == 1);
 			VTAILQ_REMOVE(&gctx->backends, be, list);
-			free_backend_l(be, 0);
+			free_backend(ctx, be);
+			continue;
 		}
+		if (be->state != gwist_st_cached ||
+				be->state != gwist_st_resolving)
+			continue;
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&
 				!strcmp(be->host, host) &&
 				!strcmp(be->port, port)) {
-			dir = be->dir;
-			if (!dir) {
-				be->refcnt++;
+			be->refcnt++;
+			if (be->state == gwist_st_resolving)
 				Lck_CondWait(&be->cond, &gctx->mtx, 0);
-				dir = be->dir;
-				free_backend_l(be, 0);
-			}
+			assert(be->state == gwist_st_cached);
 			Lck_Unlock(&gctx->mtx);
-			return (dir);
+			priv->priv = be;
+			return (be->dir);
 		}
 	}
 
-	/* no match found, if inserting isn't required, just return a simple
-	 * backend without wrapping it in a gwist_be */
-	if (!gctx->ttl) {
-		Lck_Unlock(&gctx->mtx);
-		_dir = dir = bare_backend(ctx, host, port, hints);
-		if (!_dir)
-			VRT_delete_backend(ctx, &_dir);
-		return (dir);
-	}
-
 	ALLOC_OBJ(be, GWIST_BE_MAGIC);
+	priv->priv = be;
 	be->tod = ctx->now + gctx->ttl;
 	be->host = strdup(host);
 	be->port = strdup(port);
 	be->af = hints->ai_family;
-	be->vrt = ctx;
-	be->refcnt = 1;
+	be->mtx = &gctx->mtx;
+	be->refcnt = 2; /* PRIV_TASK + VTAILQ */
+	be->state = gwist_st_resolving;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
+
+	if (gctx->ttl) {
+		be->state = gwist_st_transient;
+		be->tod = 0;
+		Lck_Unlock(&gctx->mtx);
+		be->dir = bare_backend(ctx, host, port, hints);
+		return (be->dir);
+	}
 
 	/* AI_NUMERICHOST avoids DNS resolution, no need to unlock/relock */
 	if (hints->ai_flags & AI_NUMERICHOST)
@@ -233,6 +250,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		Lck_Lock(&gctx->mtx);
 		AZ(pthread_cond_signal(&be->cond));
 	}
+	be->state = gwist_st_cached;
 	Lck_Unlock(&gctx->mtx);
 
 	return (be->dir);

@@ -23,9 +23,9 @@ varnish v1 -vcl {
 		gwist.ttl(1);
 	}
 
-	sub vcl_recv {
-		set req.backend_hint = gwist.backend(req.http.addr, req.http.port);
-		return (pass);
+	sub vcl_recv { return (pass); }
+	sub vcl_backend_fetch {
+		set bereq.backend = gwist.backend(bereq.http.addr, bereq.http.port);
 	}
 } -start
 

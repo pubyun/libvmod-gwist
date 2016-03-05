@@ -161,15 +161,6 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	AN(port);
 	AN(hints);
 
-	/* if ttl is zero, and the cache is empty, we know we have to create
-	 * a backend and we won't cache it, no need to lock. (useless optim?)*/
-	if (!gctx->ttl && VTAILQ_EMPTY(&gctx->backends)) {
-		_dir = dir = bare_backend(ctx, host, port, hints);
-		if (!_dir)
-			VRT_delete_backend(ctx, &_dir);
-		return (dir);
-	}
-
 	Lck_Lock(&gctx->mtx);
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {

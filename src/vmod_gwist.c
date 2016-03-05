@@ -254,7 +254,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	AZ(pthread_cond_init(&be->cond, NULL));
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 
-	if (gctx->ttl) {
+	if (!gctx->ttl) {
 		be->state = TRANSIENT;
 		be->tod = 0;
 		Lck_Unlock(&gctx->mtx);

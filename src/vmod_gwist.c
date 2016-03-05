@@ -10,10 +10,10 @@
 #include "vcc_if.h"
 
 enum gwist_state {
-	gwist_st_transient,
-	gwist_st_resolving,
-	gwist_st_cached,
-	gwist_st_done,
+	TRANSIENT,
+	RESOLVING,
+	CACHED,
+	DONE,
 };
 
 struct gwist_be {
@@ -47,7 +47,7 @@ release_backend_l(struct gwist_be *be, int lock) {
 	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
 	if (lock)
 		Lck_Lock(be->mtx);
-	assert(be->state == gwist_st_cached || be->state == gwist_st_transient);
+	assert(be->state == CACHED || be->state == TRANSIENT);
 	be->refcnt--;
 	AN(be->refcnt);
 	if (lock)
@@ -196,25 +196,24 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
-		if (be->state  == gwist_st_cached && be->tod > ctx->now)
-			be->state = gwist_st_done;
+		if (be->state  == CACHED && be->tod > ctx->now)
+			be->state = DONE;
 		if (be->refcnt == 1) {
 			assert(be->refcnt == 1);
 			VTAILQ_REMOVE(&gctx->backends, be, list);
 			free_backend(ctx, be);
 			continue;
 		}
-		if (be->state != gwist_st_cached ||
-				be->state != gwist_st_resolving)
+		if (be->state != CACHED || be->state != RESOLVING)
 			continue;
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&
 				!strcmp(be->host, host) &&
 				!strcmp(be->port, port)) {
 			be->refcnt++;
-			if (be->state == gwist_st_resolving)
+			if (be->state == RESOLVING)
 				Lck_CondWait(&be->cond, &gctx->mtx, 0);
-			assert(be->state == gwist_st_cached);
+			assert(be->state == CACHED);
 			Lck_Unlock(&gctx->mtx);
 			priv->priv = be;
 			return (be->dir);
@@ -229,12 +228,12 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	be->af = hints->ai_family;
 	be->mtx = &gctx->mtx;
 	be->refcnt = 2; /* PRIV_TASK + VTAILQ */
-	be->state = gwist_st_resolving;
+	be->state = RESOLVING;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
 
 	if (gctx->ttl) {
-		be->state = gwist_st_transient;
+		be->state = TRANSIENT;
 		be->tod = 0;
 		Lck_Unlock(&gctx->mtx);
 		be->dir = bare_backend(ctx, host, port, hints);
@@ -250,7 +249,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		Lck_Lock(&gctx->mtx);
 		AZ(pthread_cond_signal(&be->cond));
 	}
-	be->state = gwist_st_cached;
+	be->state = CACHED;
 	Lck_Unlock(&gctx->mtx);
 
 	return (be->dir);

@@ -20,6 +20,41 @@ DESCRIPTION
 
 Simple vmod to create backends on-the-fly using a host:port pair.
 
+USAGE
+=====
+
+Example
+-------
+
+::
+        import gwist;
+        sub vcl_init {
+                gwist.ttl(40);
+        }
+
+        sub vcl_backend_fetch {
+                set bereq.backend = gwist.backend("example.com", "80");
+        }
+
+This will create a backend pointing to example.com:80, and will cache it for
+40 seconds.
+
+You can omit gwist.ttl, in that case, the default is 10 seconds.
+
+API
+---
+
+gwist offers the following functions:
+- ttl(seconds): changes the caching period of objects, can be used throughout the
+  vcl.
+- backend(host, port): finds the first matching server
+- backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
+- backend_num(host, port): host must be an IP address
+
+WARNING
+-------
+
+The backend functions must be called from a vcl_backend_ function!
 
 INSTALLATION
 ============
@@ -66,17 +101,6 @@ vmod installation directory can be overridden by passing the
 Other files like man-pages and documentation are installed in the
 locations determined by ``configure``, which inherits its default
 ``--prefix`` setting from Varnish.
-
-USAGE EXAMPLE
-=============
-
-In your VCL you could then use this vmod along the following lines::
-
-        import gwist;
-
-        sub vcl_recv {
-                set req.backend_hint = gwist.backend("example.com", "80");
-        }
 
 COMMON PROBLEMS
 ===============

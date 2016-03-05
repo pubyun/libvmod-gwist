@@ -17,6 +17,7 @@ struct gwist_be {
 	const struct vrt_ctx		*vrt;
 	char				*host;
 	char				*port;
+	struct lock			*mtx;
 	int				af;
 	struct director			*dir;
 	VTAILQ_ENTRY(gwist_be)		list;
@@ -35,14 +36,16 @@ static unsigned loadcnt = 0;
 static struct VSC_C_lck *lck_gwist;
 
 static void
-free_backend(void *ptr) {
-	struct gwist_be *be;
-	if (!ptr)
+free_backend_l(struct gwist_be *be, int lock) {
+	if (!be)
 		return;
-	CAST_OBJ(be, ptr, GWIST_BE_MAGIC);
 	CHECK_OBJ_NOTNULL(be->vrt, VRT_CTX_MAGIC);
+	if (lock)
+		Lck_Lock(be->mtx);
 	AN(be->refcnt);
 	be->refcnt--;
+	if (lock)
+		Lck_Unlock(be->mtx);
 	if (be->refcnt)
 		return;
 	free(be->host);
@@ -52,6 +55,13 @@ free_backend(void *ptr) {
 		VRT_delete_backend(be->vrt, &be->dir);
 	free(be);
 
+}
+
+static void
+free_backend(void *ptr) {
+	struct gwist_be *be;
+	CAST_OBJ(be, ptr, GWIST_BE_MAGIC);
+	free_backend_l(be, 1);
 }
 
 int __match_proto__(vmod_event_f)
@@ -84,7 +94,7 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			Lck_Delete(&gctx->mtx);
 			VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 				VTAILQ_REMOVE(&gctx->backends, be, list);
-				free_backend(be);
+				free_backend_l(be, 0);
 			}
 			CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
 			FREE_OBJ(gctx);
@@ -166,17 +176,17 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	AN(hints);
 
 	CAST_OBJ(be, priv->priv, GWIST_BE_MAGIC);
-	if (be)
-		free_backend(be);
-	priv->free = free_backend;
-
 
 	Lck_Lock(&gctx->mtx);
+
+	if (be)
+		free_backend_l(be, 0);
+	priv->free = free_backend;
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		if (be->tod > ctx->now) { /* make room for the kids */
 			VTAILQ_REMOVE(&gctx->backends, be, list);
-			free_backend(be);
+			free_backend_l(be, 0);
 		}
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&
@@ -187,7 +197,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 				be->refcnt++;
 				Lck_CondWait(&be->cond, &gctx->mtx, 0);
 				dir = be->dir;
-				free_backend(be);
+				free_backend_l(be, 0);
 			}
 			Lck_Unlock(&gctx->mtx);
 			return (dir);

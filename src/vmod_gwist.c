@@ -186,6 +186,10 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 
 	CAST_OBJ(be, priv->priv, GWIST_BE_MAGIC);
 
+	if (ctx->bo == NULL || ctx->req != NULL)
+		WRONG("gwist.backend*(} must be called"
+			       " from backend vcl functions)");
+
 	Lck_Lock(&gctx->mtx);
 
 	if (be)

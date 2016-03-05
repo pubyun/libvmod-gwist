@@ -54,7 +54,7 @@ release_backend_l(struct gwist_be *be, int lock) {
 	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
 	if (lock)
 		Lck_Lock(be->mtx);
-	assert(be->state == CACHED || be->state == TRANSIENT);
+	assert(be->state != RESOLVING);
 	be->refcnt--;
 	AN(be->refcnt);
 	if (be->state == TRANSIENT)

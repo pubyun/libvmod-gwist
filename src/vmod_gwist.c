@@ -14,6 +14,7 @@ struct gwist_be {
 #define GWIST_BE_MAGIC			0x6887bc23
 	unsigned			refcnt;
 	double				tod;
+	const struct vrt_ctx		*vrt;
 	char				*host;
 	char				*port;
 	int				af;
@@ -34,9 +35,12 @@ static unsigned loadcnt = 0;
 static struct VSC_C_lck *lck_gwist;
 
 static void
-free_backend(VRT_CTX, struct gwist_be *be) {
-	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
-	CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
+free_backend(void *ptr) {
+	struct gwist_be *be;
+	if (!ptr)
+		return;
+	CAST_OBJ(be, ptr, GWIST_BE_MAGIC);
+	CHECK_OBJ_NOTNULL(be->vrt, VRT_CTX_MAGIC);
 	AN(be->refcnt);
 	be->refcnt--;
 	if (be->refcnt)
@@ -45,7 +49,7 @@ free_backend(VRT_CTX, struct gwist_be *be) {
 	free(be->port);
 	AZ(pthread_cond_destroy(&be->cond));
 	if (be->dir)
-		VRT_delete_backend(ctx, &be->dir);
+		VRT_delete_backend(be->vrt, &be->dir);
 	free(be);
 
 }
@@ -80,7 +84,7 @@ vmod_event(VRT_CTX, struct vmod_priv *priv, enum vcl_event_e e)
 			Lck_Delete(&gctx->mtx);
 			VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 				VTAILQ_REMOVE(&gctx->backends, be, list);
-				free_backend(ctx, be);
+				free_backend(be);
 			}
 			CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
 			FREE_OBJ(gctx);
@@ -150,7 +154,7 @@ bare_backend(VRT_CTX, const char *host, const char *port,
 }
 
 static VCL_BACKEND
-backend(VRT_CTX, struct gwist_ctx *gctx,
+backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		VCL_STRING host, VCL_STRING port,
 		const struct addrinfo *hints) {
 	struct gwist_be *be, *tbe;
@@ -161,12 +165,18 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	AN(port);
 	AN(hints);
 
+	CAST_OBJ(be, priv->priv, GWIST_BE_MAGIC);
+	if (be)
+		free_backend(be);
+	priv->free = free_backend;
+
+
 	Lck_Lock(&gctx->mtx);
 
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		if (be->tod > ctx->now) { /* make room for the kids */
 			VTAILQ_REMOVE(&gctx->backends, be, list);
-			free_backend(ctx, be);
+			free_backend(be);
 		}
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&
@@ -177,7 +187,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 				be->refcnt++;
 				Lck_CondWait(&be->cond, &gctx->mtx, 0);
 				dir = be->dir;
-				free_backend(ctx, be);
+				free_backend(be);
 			}
 			Lck_Unlock(&gctx->mtx);
 			return (dir);
@@ -199,6 +209,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 	be->host = strdup(host);
 	be->port = strdup(port);
 	be->af = hints->ai_family;
+	be->vrt = ctx;
 	be->refcnt = 1;
 	AZ(pthread_cond_init(&be->cond, NULL));
 	VTAILQ_INSERT_TAIL(&gctx->backends, be, list);
@@ -219,14 +230,14 @@ backend(VRT_CTX, struct gwist_ctx *gctx,
 
 #define DECLARE_BE(NAME, AF, FLAGS)					\
 	VCL_BACKEND __match_proto__(td_gwist_backend)			\
-	NAME(VRT_CTX,  struct vmod_priv *priv,				\
+	NAME(VRT_CTX,  struct vmod_priv *vpriv, struct vmod_priv *tpriv,\
 			VCL_STRING host, VCL_STRING port) {		\
 		struct addrinfo hints = { 0 };				\
 		hints.ai_family = AF;					\
 		hints.ai_socktype = SOCK_STREAM;			\
 		hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | FLAGS;	\
-		return (backend(ctx, (struct gwist_ctx *)priv->priv,	\
-					host, port, &hints));	\
+		return (backend(ctx, (struct gwist_ctx *)vpriv->priv,	\
+					tpriv, host, port, &hints));	\
 	}
 
 DECLARE_BE(vmod_backend ,    AF_UNSPEC, 0)

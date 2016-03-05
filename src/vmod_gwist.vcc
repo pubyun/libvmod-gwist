@@ -37,22 +37,22 @@ Please be aware that this vmod is not to be used for heavy duty as the backends
 are stored in a linked-list, hence search is done linearly.
 
 $Event vmod_event
-$Function BACKEND backend(PRIV_VCL, STRING host, STRING port)
+$Function BACKEND backend(PRIV_VCL, PRIV_TASK, STRING host, STRING port)
 
 Looks for an non-expired backend with the same host:port combination, and
 creates one if none is found. gwist will pick the first ip available.
 
 If `host` can't be resolved to an IP, no backend is returned.
 
-$Function BACKEND backend4(PRIV_VCL, STRING host, STRING port)
+$Function BACKEND backend4(PRIV_VCL, PRIV_TASK, STRING host, STRING port)
 
 Same as ``backend``, but only resolves to IPv4 addresses.
 
-$Function BACKEND backend6(PRIV_VCL, STRING host, STRING port)
+$Function BACKEND backend6(PRIV_VCL, PRIV_TASK, STRING host, STRING port)
 
 Same as ``backend``, but only resolves to IPv6 addresses.
 
-$Function BACKEND backend_num(PRIV_VCL, STRING host, STRING port)
+$Function BACKEND backend_num(PRIV_VCL, PRIV_TASK, STRING host, STRING port)
 
 Same as ``backend``, but doesn't attempt DNS resolution. It's faster, but host
 must be an IP (v4 or v6).

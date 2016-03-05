@@ -1,6 +1,6 @@
 varnishtest "Test host too long"
 
-server s1 -repeat 2 {
+server s1 {
        rxreq
        txresp -hdr "srv: s1"
 } -start

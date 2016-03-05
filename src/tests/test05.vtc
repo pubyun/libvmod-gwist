@@ -1,9 +1,6 @@
 varnishtest "Test empty port/host"
 
-server s1 -repeat 2 {
-       rxreq
-       txresp -hdr "srv: s1"
-} -start
+server s1 -start
 
 varnish v1 -vcl+backend {
 	import gwist from "${vmod_topbuild}/src/.libs/libvmod_gwist.so";

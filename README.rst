@@ -27,6 +27,7 @@ Example
 -------
 
 ::
+
         import gwist;
         sub vcl_init {
                 gwist.ttl(40);
@@ -45,16 +46,17 @@ API
 ---
 
 gwist offers the following functions:
-- ttl(seconds): changes the caching period of objects, can be used throughout the
-  vcl.
-- backend(host, port): finds the first matching server
-- backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
-- backend_num(host, port): host must be an IP address
+
+ * ttl(seconds): changes the caching period of objects, can be used throughout the
+   vcl.
+ * backend(host, port): finds the first matching server
+ * backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
+ * backend_num(host, port): host must be an IP address
 
 WARNING
 -------
 
-The backend functions must be called from a vcl_backend_ function!
+The backend functions must be called from a vcl_backend_* function!
 
 INSTALLATION
 ============

@@ -235,7 +235,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 			be->refcnt++;
 			if (be->state == RESOLVING)
 				Lck_CondWait(&be->cond, &gctx->mtx, 0);
-			assert(be->state == CACHED);
+			assert(be->state == CACHED || be->state == DONE);
 			Lck_Unlock(&gctx->mtx);
 			priv->priv = be;
 			return (be->dir);

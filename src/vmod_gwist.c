@@ -218,7 +218,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	 */
 	VTAILQ_FOREACH_SAFE(be, &gctx->backends, list, tbe) {
 		CHECK_OBJ_NOTNULL(be, GWIST_BE_MAGIC);
-		if (be->state == CACHED && be->tod > ctx->now)
+		if (be->state == CACHED && be->tod < ctx->now)
 			be->state = DONE;
 		if (be->state == DONE && be->refcnt == 1) {
 			assert(be->refcnt == 1);

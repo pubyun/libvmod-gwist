@@ -221,7 +221,6 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		if (be->state == CACHED && be->tod < ctx->now)
 			be->state = DONE;
 		if (be->state == DONE && be->refcnt == 1) {
-			assert(be->refcnt == 1);
 			VTAILQ_REMOVE(&gctx->backends, be, list);
 			free_backend(ctx, be);
 			continue;

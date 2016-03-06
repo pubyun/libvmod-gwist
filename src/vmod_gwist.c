@@ -269,7 +269,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		Lck_Unlock(&gctx->mtx);
 		be->dir = bare_backend(ctx, host, port, hints);
 		Lck_Lock(&gctx->mtx);
-		AZ(pthread_cond_signal(&be->cond));
+		AZ(pthread_cond_broadcast(&be->cond));
 	}
 	be->state = CACHED;
 	Lck_Unlock(&gctx->mtx);

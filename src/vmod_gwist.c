@@ -225,7 +225,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 			free_backend(ctx, be);
 			continue;
 		}
-		if (be->state != CACHED || be->state != RESOLVING)
+		if (be->state != CACHED && be->state != RESOLVING)
 			continue;
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&

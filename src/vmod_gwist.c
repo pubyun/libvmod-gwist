@@ -205,6 +205,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	/* clean previous backend, if any */
 	if (be)
 		release_backend_l(be, 0);
+	priv->priv = NULL;
 	priv->free = release_backend;
 
 	/* don't even try */

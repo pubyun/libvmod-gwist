@@ -45,6 +45,8 @@ creates one if none is found. gwist will pick the first ip available.
 It must be only called, as the other functions below,
 from a vcl_backend_* function.
 
+If port is empty, it is parsed out of the host using host:port format.
+
 If `host` can't be resolved to an IP, no backend is returned.
 
 $Function BACKEND backend4(PRIV_VCL, PRIV_TASK, STRING host, STRING port)

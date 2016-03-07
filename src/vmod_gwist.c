@@ -190,6 +190,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		VCL_STRING host, VCL_STRING port,
 		const struct addrinfo *hints) {
 	struct gwist_be *be, *tbe;
+	char *host_cpy, *p;
 	CHECK_OBJ_NOTNULL(ctx, VRT_CTX_MAGIC);
 	CHECK_OBJ_NOTNULL(gctx, GWIST_CTX_MAGIC);
 	AN(hints);
@@ -209,9 +210,28 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	priv->free = release_backend;
 
 	/* don't even try */
-	if (!host || !port) {
+	if (!host || !*host) {
 		Lck_Unlock(&gctx->mtx);
 		return (NULL);
+	}
+
+	/* parse out the port out of the host */
+	host_cpy = strdup(host);
+
+	if(!port || !*port) {
+		for (p = host_cpy; *p; p++) {
+			if (*p == ':') {
+				*p = '\0';
+				p++;
+				break;
+			}
+		}
+
+		if (*p) {
+			port = p;
+		} else  {
+			port = "80";
+		}
 	}
 
 	/* look for valid candidates (valid and not transient)
@@ -230,7 +250,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 			continue;
 		if ((hints->ai_family == AF_UNSPEC ||
 					hints->ai_family == be->af) &&
-				!strcmp(be->host, host) &&
+				!strcmp(be->host, host_cpy) &&
 				!strcmp(be->port, port)) {
 			be->refcnt++;
 			if (be->state == RESOLVING)
@@ -238,6 +258,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 			assert(be->state == CACHED || be->state == DONE);
 			Lck_Unlock(&gctx->mtx);
 			priv->priv = be;
+			free(host_cpy);
 			return (be->dir);
 		}
 	}
@@ -245,7 +266,7 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 	ALLOC_OBJ(be, GWIST_BE_MAGIC);
 	priv->priv = be;
 	be->tod = ctx->now + gctx->ttl;
-	be->host = strdup(host);
+	be->host = host_cpy;
 	be->port = strdup(port);
 	be->af = hints->ai_family;
 	be->mtx = &gctx->mtx;
@@ -258,16 +279,16 @@ backend(VRT_CTX, struct gwist_ctx *gctx, struct vmod_priv *priv,
 		be->state = TRANSIENT;
 		be->tod = 0;
 		Lck_Unlock(&gctx->mtx);
-		be->dir = bare_backend(ctx, host, port, hints);
+		be->dir = bare_backend(ctx, host_cpy, port, hints);
 		return (be->dir);
 	}
 
 	/* AI_NUMERICHOST avoids DNS resolution, no need to unlock/relock */
 	if (hints->ai_flags & AI_NUMERICHOST)
-		be->dir = bare_backend(ctx, host, port, hints);
+		be->dir = bare_backend(ctx, host_cpy, port, hints);
 	else {
 		Lck_Unlock(&gctx->mtx);
-		be->dir = bare_backend(ctx, host, port, hints);
+		be->dir = bare_backend(ctx, host_cpy, port, hints);
 		Lck_Lock(&gctx->mtx);
 		AZ(pthread_cond_broadcast(&be->cond));
 	}

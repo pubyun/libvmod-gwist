@@ -1,0 +1,40 @@
+varnishtest "Test host port combo"
+
+server s1 -repeat 2 {
+       rxreq
+       txresp -hdr "srv: s1"
+} -start
+
+server s2 {
+       rxreq
+       txresp -hdr "srv: s2"
+} -start
+
+
+varnish v1 -vcl {
+	import gwist from "${vmod_topbuild}/src/.libs/libvmod_gwist.so";
+
+	backend default {
+		.host = "${bad_ip}";
+		.port = "8089";
+	}
+
+	sub vcl_recv { return (pass); }
+	sub vcl_backend_fetch {
+		set bereq.backend = gwist.backend(bereq.http.Host, "");
+	}
+} -start
+
+client c1 {
+	txreq -hdr "Host: ${s1_addr}:${s1_port}"
+	rxresp
+	expect resp.http.srv == "s1"
+
+	txreq -hdr "Host: ${s2_addr}:${s2_port}"
+	rxresp
+	expect resp.http.srv == "s2"
+
+	txreq -hdr "Host: ${s1_addr}:${s1_port}"
+	rxresp
+	expect resp.http.srv == "s1"
+} -run

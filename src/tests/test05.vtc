@@ -1,4 +1,4 @@
-varnishtest "Test empty port/host"
+varnishtest "Test empty host"
 
 server s1 -start
 
@@ -12,10 +12,6 @@ varnish v1 -vcl+backend {
 } -start
 
 client c1 {
-	txreq -hdr "addr: ${s1_addr}"
-	rxresp
-	expect resp.status == 503
-
 	txreq -hdr "port: ${s1_port}"
 	rxresp
 	expect resp.status == 503

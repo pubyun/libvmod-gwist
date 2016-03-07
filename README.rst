@@ -53,6 +53,8 @@ gwist offers the following functions:
 * backend4(host, port)/backend6(host, port): finds the first matching IPv4/IPv6 server
 * backend_num(host, port): host must be an IP address
 
+If port is empty, it is parsed out of the host using host:port format.
+
 WARNING
 -------
 
